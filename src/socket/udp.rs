@@ -8,6 +8,7 @@ use crate::storage::{PacketBuffer, PacketMetadata};
 use crate::wire::{IpProtocol, IpRepr, IpEndpoint, UdpRepr};
 #[cfg(feature = "async")]
 use crate::socket::WakerRegistration;
+use object_pool::Reusable;
 
 /// A UDP packet metadata.
 pub type UdpPacketMetadata = PacketMetadata<IpEndpoint>;
@@ -236,6 +237,40 @@ impl<'a> UdpSocket<'a> {
         let length = min(data.len(), buffer.len());
         data[..length].copy_from_slice(&buffer[..length]);
         Ok((length, endpoint))
+    }
+
+    // The set_tx/rx_reusable and send/recv_take_reusable() APIs are to
+    // ensure that on low memory devices with potentially hundreds of
+    // flows, we dont hold onto the rx/tx buffers if its purpose is done.
+    // That is, if we assembled a bunch of data, just handoff the entire
+    // rx buffer with that data to the app, next time we get more packets
+    // with data, we have to be given a new rx buffer to assemble. Similarly
+    // if we have transmitted all data and it has all been acked, then give
+    // away the buffers. So yes this trades in the overhead of allocating
+    // buffers each time (which might not be so bad with pools) in favour
+    // of saving memory for idle flows
+    pub fn set_tx_reusable(&mut self, tx_buffer: UdpSocketBuffer<'a>)
+    where
+    {
+        self.tx_buffer = tx_buffer;
+    }
+
+    pub fn set_rx_reusable(&mut self, rx_buffer: UdpSocketBuffer<'a>)
+    where
+    {
+        self.rx_buffer = rx_buffer;
+    }
+
+    pub fn recv_has_data(&mut self) -> bool {
+        !self.rx_buffer.is_empty()
+    }
+
+    pub fn recv_take_reusable(&mut self) -> Option<(Reusable<Vec<u8>>, usize, IpEndpoint)> {
+        return self.rx_buffer.take_reusable();
+    }
+
+    pub fn send_take_reusable(&mut self) -> Option<(Reusable<Vec<u8>>, usize, IpEndpoint)> {
+        return self.tx_buffer.take_reusable();
     }
 
     /// Peek at a packet received from a remote endpoint, and return the endpoint as well

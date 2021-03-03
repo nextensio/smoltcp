@@ -70,7 +70,7 @@ use std::boxed::Box;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::boxed::Box;
 #[cfg(any(feature = "std", feature = "alloc"))]
-const CONTIG_COUNT: usize = 32;
+const CONTIG_COUNT: usize = 4;
 
 #[cfg(not(any(feature = "std", feature = "alloc")))]
 const CONTIG_COUNT: usize = 4;

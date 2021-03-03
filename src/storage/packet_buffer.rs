@@ -2,6 +2,7 @@ use managed::ManagedSlice;
 
 use crate::{Error, Result};
 use crate::storage::RingBuffer;
+use object_pool::Reusable;
 
 /// Size and header of a packet.
 #[derive(Debug, Clone, Copy)]
@@ -177,6 +178,18 @@ impl<'a, H> PacketBuffer<'a, H> {
     /// Return the maximum number of bytes in the payload ring buffer.
     pub fn payload_capacity(&self) -> usize {
         self.payload_ring.capacity()
+    }
+
+    pub fn take_reusable(&mut self) -> Option<(Reusable<Vec<u8>>, usize, H)> {
+        let meta = self.metadata_ring.dequeue_one();
+        let p = self.payload_ring.take_reusable();
+        if let Ok(m) = meta {
+            let (v, s) = p.unwrap();
+            assert!(m.size == s);
+            return Some((v, s, m.header.take().unwrap()));
+        } else {
+            return None;
+        }
     }
 }
 

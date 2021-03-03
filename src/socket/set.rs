@@ -75,6 +75,11 @@ impl<'a> Set<'a> {
                 let index = sockets.len() - 1;
                 put(index, &mut sockets[index], socket)
             }
+            ManagedSlice::Reusable(ref mut sockets) => {
+                sockets.push(None);
+                let index = sockets.len() - 1;
+                put(index, &mut sockets[index], socket)
+            }
         }
     }
 

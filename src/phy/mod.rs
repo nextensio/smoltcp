@@ -220,6 +220,10 @@ pub struct DeviceCapabilities {
     /// Most common IP MTU is 1500. Minimum is 576 (for IPv4) or 1280 (for IPv6). Maximum is 9216 octets.
     pub max_transmission_unit: usize,
 
+    /// The max_transmission_unit is sometimes desirable to be less than the maximum receive data length
+    /// for performance reasons - most often the maximum receive will be >= maximum transmission.
+    pub max_receive_unit: usize,
+
     /// Maximum burst size, in terms of MTU.
     ///
     /// The network device is unable to send or receive bursts large than the value returned
@@ -234,6 +238,17 @@ pub struct DeviceCapabilities {
     /// If the network device is capable of verifying or computing checksums for some protocols,
     /// it can request that the stack not do so in software to improve performance.
     pub checksum: ChecksumCapabilities,
+}
+
+impl DeviceCapabilities {
+    pub fn new(medium: Medium, rx_mtu: usize, tx_mtu: usize) -> DeviceCapabilities {
+        DeviceCapabilities {
+            max_receive_unit: rx_mtu,
+            max_transmission_unit: tx_mtu,
+            medium: medium,
+            ..DeviceCapabilities::default()
+        }
+    }
 }
 
 /// Type of medium of a device.

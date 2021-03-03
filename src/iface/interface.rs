@@ -688,7 +688,13 @@ impl<'a, DeviceT> Interface<'a, DeviceT>
                             #[cfg(feature = "medium-ip")]
                             Medium::Ip => _caps.max_transmission_unit,
                         };
-                        socket.dispatch(timestamp, ip_mtu, |response|
+                        let rx_mtu = match _caps.medium {
+                            #[cfg(feature = "medium-ethernet")]
+                            Medium::Ethernet => _caps.max_receive_unit - EthernetFrame::<&[u8]>::header_len(),
+                            #[cfg(feature = "medium-ip")]
+                            Medium::Ip => _caps.max_receive_unit,
+                        };
+                        socket.dispatch(timestamp, rx_mtu, ip_mtu, |response|
                             respond!(IpPacket::Tcp(response)))
                     }
                 };
