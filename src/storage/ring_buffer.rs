@@ -6,6 +6,7 @@ use managed::ManagedSlice;
 
 use crate::storage::Resettable;
 use crate::{Error, Result};
+use object_pool::Reusable;
 
 /// A ring buffer.
 ///
@@ -26,6 +27,7 @@ pub struct RingBuffer<'a, T: 'a> {
     storage: ManagedSlice<'a, T>,
     read_at: usize,
     length: usize,
+    capacity: usize,
 }
 
 impl<'a, T: 'a> RingBuffer<'a, T> {
@@ -36,10 +38,13 @@ impl<'a, T: 'a> RingBuffer<'a, T> {
     where
         S: Into<ManagedSlice<'a, T>>,
     {
+        let storage = storage.into();
+        let capacity = storage.len();
         RingBuffer {
-            storage: storage.into(),
+            storage,
             read_at: 0,
             length: 0,
+            capacity,
         }
     }
 
@@ -51,7 +56,7 @@ impl<'a, T: 'a> RingBuffer<'a, T> {
 
     /// Return the maximum number of elements in the ring buffer.
     pub fn capacity(&self) -> usize {
-        self.storage.len()
+        self.capacity
     }
 
     /// Clear the ring buffer, and reset every element.
@@ -106,6 +111,22 @@ impl<'a, T: 'a> RingBuffer<'a, T> {
     /// additional checks to ensure the capacity is not zero.
     fn get_idx_unchecked(&self, idx: usize) -> usize {
         (self.read_at + idx) % self.capacity()
+    }
+
+    pub fn take_reusable(&mut self) -> Option<(Reusable<Vec<T>>, usize)> {
+        let empty = managed::ManagedSlice::Owned(vec![]);
+        let storage = std::mem::replace(&mut self.storage, empty);
+        match storage {
+            managed::ManagedSlice::Reusable(v) => {
+                let len = self.len();
+                self.read_at = 0;
+                self.length = 0;
+                return Some((v, len));
+            }
+            _ => (),
+        }
+        self.storage = storage;
+        return None;
     }
 }
 

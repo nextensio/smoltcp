@@ -246,6 +246,14 @@ pub struct DeviceCapabilities {
 }
 
 impl DeviceCapabilities {
+    pub fn new(medium: Medium, mtu: usize) -> DeviceCapabilities {
+        DeviceCapabilities {
+            max_transmission_unit: mtu,
+            medium: medium,
+            ..DeviceCapabilities::default()
+        }
+    }
+
     pub fn ip_mtu(&self) -> usize {
         match self.medium {
             #[cfg(feature = "medium-ethernet")]

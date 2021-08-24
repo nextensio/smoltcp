@@ -15,6 +15,7 @@ use crate::wire::{
     IpAddress, IpEndpoint, IpProtocol, IpRepr, TcpControl, TcpRepr, TcpSeqNumber, TCP_HEADER_LEN,
 };
 use crate::{Error, Result};
+use object_pool::Reusable;
 
 /// A TCP socket ring buffer.
 pub type SocketBuffer<'a> = RingBuffer<'a, u8>;
@@ -1037,6 +1038,63 @@ impl<'a> TcpSocket<'a> {
             let size = rx_buffer.dequeue_slice(data);
             (size, size)
         })
+    }
+
+    // The set_tx/rx_reusable and send/recv_take_reusable() APIs are to
+    // ensure that on low memory devices with potentially hundreds of
+    // flows, we dont hold onto the rx/tx buffers if its purpose is done.
+    // That is, if we assembled a bunch of data, just handoff the entire
+    // rx buffer with that data to the app, next time we get more packets
+    // with data, we have to be given a new rx buffer to assemble. Similarly
+    // if we have transmitted all data and it has all been acked, then give
+    // away the buffers. So yes this trades in the overhead of allocating
+    // buffers each time (which might not be so bad with pools) in favour
+    // of saving memory for idle flows
+    pub fn set_tx_reusable<T>(&mut self, tx_buffer: T)
+    where
+        T: Into<SocketBuffer<'a>>,
+    {
+        self.tx_buffer = tx_buffer.into();
+    }
+
+    pub fn set_rx_reusable<T>(&mut self, rx_buffer: T)
+    where
+        T: Into<SocketBuffer<'a>>,
+    {
+        self.rx_buffer = rx_buffer.into();
+    }
+
+    pub fn recv_has_data(&mut self) -> bool {
+        !self.assembler.is_empty() || self.rx_buffer.len() > 0
+    }
+
+    // return the entire rx_buffer it it has non-zero amount of data
+    pub fn recv_take_reusable(&mut self, force: bool) -> Option<(Reusable<Vec<u8>>, usize)> {
+        if self.assembler.is_empty() {
+            self.remote_seq_no += self.rx_buffer.len();
+            return self.rx_buffer.take_reusable();
+        } else {
+            if force {
+                return self.rx_buffer.take_reusable();
+            }
+            return None;
+        }
+    }
+
+    // return the entire tx buffer if it DOES NOT have any data
+    pub fn send_take_reusable(&mut self, force: bool) -> Option<(Reusable<Vec<u8>>, usize)> {
+        if self.tx_buffer.len() == 0 {
+            return self.tx_buffer.take_reusable();
+        } else {
+            if force {
+                return self.tx_buffer.take_reusable();
+            }
+            return None;
+        }
+    }
+
+    pub fn reset_delayed_ack(&mut self) {
+        //self.ack_delay_until = None;
     }
 
     /// Peek at a sequence of received octets without removing them from
